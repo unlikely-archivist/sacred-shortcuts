@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sacred Shortcuts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<style>
+/* Layout: one locked screen. Possession meter on top, the host in the middle, the invocation at the bottom. */
+:root {
+  --void: #070405;
+  --bone: #e6ddd0;
+  --ash: #7d716b;
+  --blood: #d3141f;
+  --holy: #fff3cf;
+  --display: "Press Start 2P", ui-monospace, Menlo, monospace;
+  --body: "VT323", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--bone);
+  font-family: var(--body);
+  font-size: 20px;
+  overflow: hidden;
+  -webkit-font-smoothing: none;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--holy); outline-offset: 3px; }
+
+#app {
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* HUD */
+.hud { display: grid; gap: 8px; }
+.meter-labels, .stats {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  font-family: var(--display); font-size: 9px; letter-spacing: .12em; color: var(--ash);
+}
+#phase { color: var(--bone); text-align: center; }
+.meter { position: relative; height: 14px; background: var(--bone); box-shadow: 0 0 18px rgba(255, 243, 207, .15); }
+#meterFill { position: absolute; top: 0; right: 0; bottom: 0; width: 50%; background: var(--blood); box-shadow: 0 0 22px var(--blood); transition: width .25s steps(6); }
+.meter .mid { position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: var(--void); }
+.stats { font-variant-numeric: tabular-nums; }
+#mute { background: none; border: 0; padding: 4px 0; cursor: pointer; font-family: var(--display); font-size: 9px; letter-spacing: .12em; color: var(--ash); }
+#mute:hover { color: var(--bone); }
+
+/* Altar */
+.altar { position: relative; display: grid; place-items: center; min-height: 0; }
+.host { position: relative; height: min(100%, 64vw); max-height: 440px; aspect-ratio: 1; max-width: 100%; }
+.host canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+#head { transform-origin: 50% 50%; }
+.mod { font-family: -apple-system, "Apple Symbols", "Segoe UI Symbol", "DejaVu Sans", sans-serif; font-size: 1.35em; line-height: 0; vertical-align: -0.08em; }
+.invoke { transition: opacity .3s; }
+.over .invoke { opacity: 0; }
+.voice {
+  position: absolute; left: 0; right: 0; text-align: center;
+  font-family: var(--display); font-size: clamp(9px, 1.9vw, 13px); letter-spacing: .08em; line-height: 1.6;
+  text-wrap: balance; pointer-events: none; opacity: 0; transition: opacity .2s;
+}
+#rite { top: 4%; color: var(--holy); text-shadow: 0 0 12px rgba(255, 243, 207, .6); }
+#taunt { bottom: 4%; color: var(--blood); text-shadow: 0 0 10px var(--blood); }
+.voice.on { opacity: 1; }
+
+/* Invocation */
+.invoke { display: grid; gap: 10px; justify-items: center; text-align: center; min-height: 170px; align-content: start; }
+.label { font-family: var(--display); font-size: 9px; letter-spacing: .3em; color: var(--ash); }
+#action { font-family: var(--display); font-size: clamp(14px, 3.4vw, 26px); line-height: 1.4; text-wrap: balance; color: var(--bone); min-height: 1.4em; }
+#keys { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; min-height: 42px; font-family: var(--display); }
+.combo { font-size: clamp(14px, 3vw, 22px); padding: 8px 10px; border: 2px solid currentColor; letter-spacing: .1em; }
+.combo.ghost { border-style: dashed; color: var(--ash); }
+.then { font-size: 8px; letter-spacing: .2em; color: var(--ash); }
+#keys.hint .combo:not(.done) { color: var(--ash); }
+#keys.hit { color: var(--holy); }
+#keys.miss { color: var(--blood); }
+.done { color: var(--holy); }
+#pressed { font-size: 20px; color: var(--ash); min-height: 1.2em; }
+.timer { width: min(420px, 100%); height: 6px; background: rgba(230, 221, 208, .12); }
+#timerFill { height: 100%; width: 100%; background: var(--bone); }
+#timerFill.low { background: var(--blood); }
+.foot { font-size: 18px; color: var(--ash); }
+
+/* Screens */
+.screen {
+  position: absolute; inset: 0; z-index: 5;
+  display: grid; place-items: center; align-content: center; gap: 22px;
+  padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: rgba(7, 4, 5, .9); text-align: center; overflow-y: auto;
+}
+.screen h1, .screen h2 { margin: 0; font-family: var(--display); font-weight: 400; line-height: 1.25; text-wrap: balance; }
+.screen h1 { font-size: clamp(26px, 7vw, 58px); letter-spacing: .04em; color: var(--bone); text-shadow: 3px 3px 0 var(--blood); }
+.screen h2 { font-size: clamp(16px, 4vw, 30px); }
+.tag { font-family: var(--display); font-size: clamp(9px, 1.8vw, 12px); letter-spacing: .2em; color: var(--blood); }
+.howto { max-width: 34em; line-height: 1.15; color: var(--bone); margin: 0; }
+.modes { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
+.mode {
+  display: grid; gap: 8px; width: 250px; max-width: 100%; padding: 16px 14px;
+  background: none; border: 2px solid var(--ash); cursor: pointer; text-align: center;
+}
+.mode b { font-family: var(--display); font-weight: 400; font-size: 13px; letter-spacing: .1em; }
+.mode span { color: var(--ash); line-height: 1; }
+.mode:hover, .mode:focus-visible { border-color: var(--bone); }
+.mode:hover b, .mode:focus-visible b { color: var(--holy); }
+.mode kbd { font-family: var(--display); font-size: 8px; color: var(--ash); }
+.small { font-size: 18px; color: var(--ash); margin: 0; max-width: 36em; }
+.touch-note { display: none; color: var(--blood); }
+@media (hover: none) and (pointer: coarse) { .touch-note { display: block; } }
+
+.statgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; width: min(560px, 100%); }
+.statgrid div { display: grid; gap: 6px; }
+.statgrid dt { font-family: var(--display); font-size: 8px; letter-spacing: .15em; color: var(--ash); }
+.statgrid dd { margin: 0; font-family: var(--display); font-size: 14px; font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .statgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.study { width: min(560px, 100%); display: grid; gap: 8px; }
+.study h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 9px; letter-spacing: .25em; color: var(--blood); }
+.study ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.study li { display: flex; justify-content: space-between; gap: 12px; text-align: left; border-bottom: 1px dotted rgba(125, 113, 107, .5); padding-block: 2px; }
+.study li span:last-child { font-family: var(--display); font-size: 11px; color: var(--holy); white-space: nowrap; align-self: center; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.btn { background: none; border: 2px solid var(--bone); padding: 12px 16px; cursor: pointer; font-family: var(--display); font-size: 11px; letter-spacing: .12em; }
+.btn:hover { background: var(--bone); color: var(--void); }
+.btn.quiet { border-color: var(--ash); color: var(--ash); }
+
+/* Film */
+#grain, .scan, .vignette, #flash { position: fixed; inset: 0; pointer-events: none; }
+#grain { width: 100%; height: 100%; opacity: .17; z-index: 8; mix-blend-mode: screen; }
+.scan { z-index: 9; background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.28) 2px 3px); }
+.vignette { z-index: 7; background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 45%, rgba(0,0,0,.85) 100%); }
+#flash { z-index: 6; opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  #meterFill { transition: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="hud">
+    <div class="meter-labels"><span>FAITH</span><span id="phase">POSSESSED</span><span>DEMON</span></div>
+    <div class="meter" role="meter" aria-label="Possession" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><div id="meterFill"></div><div class="mid"></div></div>
+    <div class="stats"><span id="streak">STREAK 0</span><span id="clock">0:00</span><button id="mute" type="button">SOUND ON</button></div>
+  </header>
+
+  <main class="altar">
+    <div class="host" aria-hidden="true">
+      <canvas id="body" width="64" height="64"></canvas>
+      <canvas id="head" width="64" height="64"></canvas>
+    </div>
+    <div id="rite" class="voice"></div>
+    <div id="taunt" class="voice"></div>
+  </main>
+
+  <footer class="invoke" aria-live="polite">
+    <div class="label">INVOKE</div>
+    <div id="action">TOGGLE THE SIDEBAR</div>
+    <div id="keys"><span class="combo ghost">? ? ?</span></div>
+    <div id="pressed"></div>
+    <div class="timer"><div id="timerFill"></div></div>
+    <div class="foot">Esc skips a shortcut your browser won't let through</div>
+  </footer>
+
+  <section id="title" class="screen">
+    <div class="tag">THE POWER OF <span class="mod">⌘</span> COMPELS YOU</div>
+    <h1>SACRED<br>SHORTCUTS</h1>
+    <p class="howto">Something has taken the girl. Each prompt names a VS Code command. Press its Mac shortcut before the candle burns down. Every right answer drives the demon back. Every mistake, every hesitation, feeds it.</p>
+    <div class="modes">
+      <button class="mode" id="modeAltar" type="button"><kbd>PRESS 1</kbd><b>ALTAR BOY</b><span>The keys appear when your time runs low.</span></button>
+      <button class="mode" id="modeExorcist" type="button"><kbd>PRESS 2</kbd><b>EXORCIST</b><span>No help from above.</span></button>
+    </div>
+    <p class="small">VS Code default keybindings, Mac layout. Works best in Chrome.</p>
+    <p class="small touch-note">This rite needs a physical keyboard.</p>
+  </section>
+
+  <section id="pause" class="screen" hidden>
+    <h2>THE RITE IS PAUSED</h2>
+    <p class="small">The page lost focus. Click here or press Enter to continue.</p>
+  </section>
+
+  <section id="end" class="screen" hidden>
+    <div class="tag" id="endTag"></div>
+    <h1 id="endHead"></h1>
+    <dl class="statgrid">
+      <div><dt>TIME</dt><dd id="sTime"></dd></div>
+      <div><dt>ACCURACY</dt><dd id="sAcc"></dd></div>
+      <div><dt>BEST STREAK</dt><dd id="sStreak"></dd></div>
+      <div><dt>FASTEST</dt><dd id="sBest"></dd></div>
+    </dl>
+    <div class="study" id="study" hidden>
+      <h3>SCRIPTURE TO STUDY</h3>
+      <ul id="studyList"></ul>
+    </div>
+    <div class="row">
+      <button class="btn" id="again" type="button">BEGIN AGAIN ↵</button>
+      <button class="btn quiet" id="menu" type="button">CHANGE MODE</button>
+    </div>
+  </section>
+</div>
+
+<div id="flash"></div>
+<div class="vignette"></div>
+<canvas id="grain"></canvas>
+<div class="scan"></div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // [command, VS Code default Mac keybinding, tier]. Shortcuts the browser reserves (⌘W, ⌘T, ⌘N, ⌘[ …) are left out.
+  const RITE = [
+    ['OPEN THE COMMAND PALETTE', 'cmd+shift+p', 1],
+    ['QUICK OPEN A FILE', 'cmd+p', 1],
+    ['TOGGLE THE SIDEBAR', 'cmd+b', 1],
+    ['SAVE THE FILE', 'cmd+s', 1],
+    ['FIND IN THE FILE', 'cmd+f', 1],
+    ['COMMENT OUT THE LINE', 'cmd+/', 1],
+    ['TOGGLE THE TERMINAL', 'ctrl+`', 1],
+    ['SELECT THE NEXT MATCH', 'cmd+d', 1],
+    ['SEARCH ALL FILES', 'cmd+shift+f', 1],
+    ['TOGGLE THE PANEL', 'cmd+j', 1],
+    ['MOVE THE LINE UP', 'alt+up', 1],
+    ['MOVE THE LINE DOWN', 'alt+down', 1],
+    ['UNDO', 'cmd+z', 1],
+    ['REDO', 'cmd+shift+z', 1],
+
+    ['SHOW THE EXPLORER', 'cmd+shift+e', 2],
+    ['OPEN EXTENSIONS', 'cmd+shift+x', 2],
+    ['OPEN SOURCE CONTROL', 'ctrl+shift+g', 2],
+    ['OPEN RUN AND DEBUG', 'cmd+shift+d', 2],
+    ['SHOW PROBLEMS', 'cmd+shift+m', 2],
+    ['GO TO LINE', 'ctrl+g', 2],
+    ['GO TO SYMBOL IN THE FILE', 'cmd+shift+o', 2],
+    ['DELETE THE LINE', 'cmd+shift+k', 2],
+    ['INSERT A LINE BELOW', 'cmd+enter', 2],
+    ['INSERT A LINE ABOVE', 'cmd+shift+enter', 2],
+    ['COPY THE LINE DOWN', 'shift+alt+down', 2],
+    ['COPY THE LINE UP', 'shift+alt+up', 2],
+    ['SPLIT THE EDITOR', 'cmd+\\', 2],
+    ['RENAME THE SYMBOL', 'f2', 2],
+    ['QUICK FIX', 'cmd+.', 2],
+    ['TOGGLE WORD WRAP', 'alt+z', 2],
+    ['REPLACE IN THE FILE', 'cmd+alt+f', 2],
+    ['START DEBUGGING', 'f5', 2],
+    ['TOGGLE A BREAKPOINT', 'f9', 2],
+    ['SELECT ALL MATCHES', 'cmd+shift+l', 2],
+
+    ['ADD A CURSOR ABOVE', 'cmd+alt+up', 3],
+    ['ADD A CURSOR BELOW', 'cmd+alt+down', 3],
+    ['FORMAT THE DOCUMENT', 'shift+alt+f', 3],
+    ['TOGGLE A BLOCK COMMENT', 'shift+alt+a', 3],
+    ['SAVE ALL FILES', 'cmd+alt+s', 3],
+    ['UNDO THE LAST CURSOR', 'cmd+u', 3],
+    ['REPLACE IN ALL FILES', 'cmd+shift+h', 3],
+    ['OPEN A NEW TERMINAL', 'ctrl+shift+`', 3],
+    ['GO BACK', 'ctrl+-', 3],
+    ['GO FORWARD', 'ctrl+shift+-', 3],
+    ['FOLD THE REGION', 'cmd+alt+[', 3],
+    ['UNFOLD THE REGION', 'cmd+alt+]', 3],
+    ['PREVIEW THE MARKDOWN', 'cmd+shift+v', 3],
+    ['SHOW THE OUTPUT', 'cmd+shift+u', 3],
+    ['OPEN THE DEBUG CONSOLE', 'cmd+shift+y', 3],
+    ['ENTER ZEN MODE', 'cmd+k z', 3],
+    ['FOLD EVERYTHING', 'cmd+k cmd+0', 3],
+    ['UNFOLD EVERYTHING', 'cmd+k cmd+j', 3],
+    ['OPEN KEYBOARD SHORTCUTS', 'cmd+k cmd+s', 3],
+    ['PICK A COLOR THEME', 'cmd+k cmd+t', 3],
+    ['CHANGE THE LANGUAGE MODE', 'cmd+k m', 3],
+    ['TRIM TRAILING WHITESPACE', 'cmd+k cmd+x', 3],
+    ['SHOW THE HOVER', 'cmd+k cmd+i', 3],
+    ['FORMAT THE SELECTION', 'cmd+k cmd+f', 3],
+    ['ADD A LINE COMMENT', 'cmd+k cmd+c', 3],
+    ['REMOVE A LINE COMMENT', 'cmd+k cmd+u', 3],
+  ];
+
+  const PRIEST = [
+    'THE POWER OF ⌘ COMPELS YOU', 'THE POWER OF ⌘ COMPELS YOU', 'BE GONE, UNCLEAN PROCESS',
+    'IN NOMINE ⌘, ⇧, ET ⌥', 'BACK TO THE VOID', 'I REBUKE THEE, ROOT USER',
+    'KILL -9, SPIRIT', 'RETURN TO /DEV/NULL',
+  ];
+  const TAUNT = [
+    'YOUR MOTHER CODES IN NOTEPAD', 'YOU REACHED FOR THE MOUSE. I SAW.', 'TABS OR SPACES, PRIEST?',
+    'WE ARE LEGION. WE ARE MERGE CONFLICTS.', 'SHE IS MINE. SO IS HER NODE_MODULES.',
+    'PATHETIC. EVEN AUTOCOMPLETE KNEW THAT.', 'WRONG. TRY :WQ', 'YOUR FAITH IS DEPRECATED',
+    'I HAVE LIVED IN HER SINCE VIM 6', 'HAHAHAHAHAHA', 'DID YOU READ THE DOCS, FATHER?',
+  ];
+  const SLOW = ['TOO SLOW, FATHER', 'THE CURSOR BLINKS. YOU DO NOT.', 'YOUR GOD HAS A LONG BUILD TIME', 'STILL INDEXING?'];
+
+  const GLYPH = { up: '↑', down: '↓', left: '←', right: '→', enter: '↵', space: 'SPACE', esc: 'ESC', backspace: '⌫', tab: '⇥' };
+  const CODE = {
+    Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\', Slash: '/',
+    Period: '.', Comma: ',', Semicolon: ';', Quote: "'", Enter: 'enter', NumpadEnter: 'enter',
+    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Space: 'space',
+    Escape: 'esc', Backspace: 'backspace', Tab: 'tab',
+  };
+  const MODIFIERS = ['Meta', 'Control', 'Alt', 'Shift', 'CapsLock', 'Fn', 'OS', 'Hyper', 'Super'];
+
+  const parse = spec => spec.split(' ').map(part => {
+    const bits = part.split('+');
+    const c = { cmd: false, ctrl: false, alt: false, shift: false, key: bits.pop() };
+    bits.forEach(b => { c[b] = true; });
+    return c;
+  });
+  const ITEMS = RITE.map(([name, spec, tier]) => ({ name, spec, tier, combos: parse(spec) }));
+
+  // e.code, not e.key, so ⌥ and ⇧ don't turn Z into Ω or ` into ~.
+  function comboOf(e) {
+    if (MODIFIERS.includes(e.key)) return null;
+    let k = CODE[e.code];
+    if (!k) {
+      if (/^Key[A-Z]$/.test(e.code)) k = e.code.slice(3).toLowerCase();
+      else if (/^Digit\d$/.test(e.code)) k = e.code.slice(5);
+      else if (/^Numpad\d$/.test(e.code)) k = e.code.slice(6);
+      else if (/^F\d+$/.test(e.code)) k = e.code.toLowerCase();
+      else k = (e.key || '').toLowerCase();
+    }
+    return { cmd: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, key: k };
+  }
+  const same = (a, b) => a.cmd === b.cmd && a.ctrl === b.ctrl && a.alt === b.alt && a.shift === b.shift && a.key === b.key;
+  const show = c => (c.ctrl ? '⌃' : '') + (c.alt ? '⌥' : '') + (c.shift ? '⇧' : '') + (c.cmd ? '⌘' : '') + (GLYPH[c.key] || c.key.toUpperCase());
+  const showAll = item => item.combos.map(show).join(' ');
+  // The arcade face has no ⌘⇧⌥⌃, so those get a system symbol font.
+  function glyphs(el, text) {
+    el.replaceChildren(...text.split(/([⌘⇧⌥⌃])/).filter(Boolean).map(part => {
+      if (!/^[⌘⇧⌥⌃]$/.test(part)) return document.createTextNode(part);
+      const m = document.createElement('span'); m.className = 'mod'; m.textContent = part; return m;
+    }));
+  }
+
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const pick = a => a[Math.random() * a.length | 0];
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+  const CREEP = 0.8;        // possession gained per second, always
+  const MISS = 9, SLOWPOKE = 11, SKIP = 5;
+
+  const S = {
+    state: 'title', mode: 'altar', paused: false, power: 50, vis: 0.5, clock: 0,
+    cur: null, streak: 0, best: 0, hits: 0, tries: 0, missed: new Map(), banned: new Set(), bag: [],
+    endAt: 0, jolt: 0, lastTick: 0,
+  };
+
+  /* ---------- sound ---------- */
+  const A = { ctx: null, master: null, drone: null, on: true, lastDrone: 0 };
+  function audioInit() {
+    if (A.ctx) { if (A.ctx.state === 'suspended') A.ctx.resume(); return; }
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return;
+    A.ctx = new C();
+    A.master = A.ctx.createGain();
+    A.master.gain.value = A.on ? 0.7 : 0;
+    A.master.connect(A.ctx.destination);
+    const f = A.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 200; f.Q.value = 4;
+    const g = A.ctx.createGain(); g.gain.value = 0;
+    [55, 55.6, 82.2, 110.4].forEach(fr => {
+      const o = A.ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; o.connect(f); o.start();
+    });
+    f.connect(g); g.connect(A.master);
+    A.drone = { f, g };
+  }
+  function droneTo(p, active) {
+    if (!A.drone) return;
+    const t = A.ctx.currentTime;
+    A.drone.g.gain.setTargetAtTime(active ? 0.04 + 0.12 * p : 0.015, t, 0.4);
+    A.drone.f.frequency.setTargetAtTime(140 + 1100 * p * p, t, 0.4);
+  }
+  function tone(freq, dur, type = 'sine', vol = 0.2, slideTo) {
+    if (!A.ctx) return;
+    const t = A.ctx.currentTime, o = A.ctx.createOscillator(), g = A.ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(A.master); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(dur, vol, cutoff) {
+    if (!A.ctx) return;
+    const t = A.ctx.currentTime, n = A.ctx.sampleRate * dur | 0;
+    const buf = A.ctx.createBuffer(1, n, A.ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = A.ctx.createBufferSource(); src.buffer = buf;
+    const f = A.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff;
+    const g = A.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(A.master); src.start(t);
+  }
+  const sfx = {
+    hit() { tone(660, 0.7, 'sine', 0.16); tone(990, 0.9, 'sine', 0.1); tone(1320, 0.5, 'triangle', 0.05); },
+    step() { tone(520, 0.12, 'square', 0.05); },
+    miss() { noise(0.5, 0.35, 500); tone(70, 0.6, 'sawtooth', 0.25, 35); },
+    tick() { tone(1400, 0.03, 'square', 0.04); },
+    skip() { tone(220, 0.25, 'triangle', 0.08, 140); },
+    win() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 1.2, 'sine', 0.12), i * 140)); },
+    lose() { noise(2.2, 0.4, 300); tone(90, 2.4, 'sawtooth', 0.3, 30); tone(93, 2.4, 'sawtooth', 0.2, 28); },
+  };
+
+  /* ---------- the host ---------- */
+  const headC = $('#head'), bodyC = $('#body');
+  const hctx = headC.getContext('2d'), bctx = bodyC.getContext('2d');
+  const himg = hctx.createImageData(64, 64), bimg = bctx.createImageData(64, 64);
+  const hash = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const inE = (x, y, cx, cy, rx, ry) => { const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry; return dx * dx + dy * dy <= 1; };
+  function put(img, x, y, c, a = 1) {
+    x |= 0; y |= 0;
+    if (x < 0 || y < 0 || x > 63 || y > 63) return;
+    const i = (y * 64 + x) * 4, d = img.data;
+    if (a >= 1 || d[i + 3] === 0) { d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = a >= 1 ? 255 : 255 * a; return; }
+    d[i] += (c[0] - d[i]) * a; d[i + 1] += (c[1] - d[i + 1]) * a; d[i + 2] += (c[2] - d[i + 2]) * a;
+  }
+
+  let seed = 11;
+  const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+  const CRACKS = [];
+  for (let i = 0; i < 10; i++) {
+    let x = 21 + rnd() * 22 | 0, y = 18 + rnd() * 28 | 0;
+    const pts = [], len = 5 + rnd() * 7 | 0;
+    for (let s = 0; s < len; s++) { pts.push([x, y]); x += Math.round(rnd() * 2 - 1); if (rnd() < 0.75) y++; }
+    CRACKS.push({ th: 0.42 + i * 0.055, pts });
+  }
+
+  const HAIR = [24, 14, 12];
+  const skinOf = p => mix([236, 218, 200], [142, 156, 120], p);
+
+  function drawBody(p) {
+    bimg.data.fill(0);
+    const skin = mix(skinOf(p), [0, 0, 0], 0.18);
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
+      if (y >= 44 && y <= 56 && x >= 28 && x <= 36) put(bimg, x, y, skin);
+      if (y >= 53 && inE(x, y, 32, 74, 29, 21)) {
+        const edge = !inE(x, y, 32, 74, 26, 19);
+        put(bimg, x, y, edge ? [150, 142, 130] : [212, 204, 190]);
+        if (inE(x, y, 32, 53, 6, 4)) put(bimg, x, y, skin);
+        if (p > 0.6 && hash(x * 3, y * 5) < (p - 0.6) * 0.25) put(bimg, x, y, [120, 20, 24]);
+      }
+    }
+    bctx.putImageData(bimg, 0, 0);
+  }
+
+  function drawHead(p, t) {
+    himg.data.fill(0);
+    const skin = skinOf(p), shade = mix(skin, [40, 18, 30], 0.3);
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
+      if (inE(x, y, 32, 32, 20, 25)) put(himg, x, y, HAIR);
+      if (inE(x, y, 32, 32, 14, 18)) {
+        let c = skin;
+        if (p > 0.45 && hash(x, y) < (p - 0.45) * 0.5) c = shade;
+        if (y < 18 + hash(x, 1) * 3) c = HAIR;
+        put(himg, x, y, c);
+      }
+    }
+    // stray hair, wilder as it takes hold
+    const strays = (p * p * 40) | 0;
+    for (let i = 0; i < strays; i++) {
+      const a = Math.random() * Math.PI * 2, r = 20 + Math.random() * 4;
+      put(himg, 32 + Math.cos(a) * r, 32 + Math.sin(a) * r * 1.2, HAIR);
+    }
+    // brows slant in as it gets angry
+    for (let i = 0; i < 5; i++) {
+      const dy = Math.round((i / 4) * p * 2.4);
+      put(himg, 24 + i, 26 + dy, HAIR);
+      put(himg, 40 - i, 26 + dy, HAIR);
+    }
+    const blink = p < 0.3 && (t % 4.2) < 0.13;
+    for (const x0 of [25, 36]) {
+      for (let dx = 0; dx < 4; dx++) for (let dy = 0; dy < 2; dy++) {
+        let c;
+        if (blink) c = dy ? shade : skin;
+        else if (p < 0.7) {
+          c = mix([240, 234, 222], [206, 182, 84], clamp((p - 0.3) / 0.4, 0, 1));
+          if (dx === 1 || dx === 2) c = mix([60, 40, 30], [160, 12, 18], clamp((p - 0.35) / 0.3, 0, 1));
+        } else {
+          c = [4, 0, 2];
+          if ((dx === 1 || dx === 2) && dy === 0 && Math.sin(t * 3 + x0) > -0.6) c = [255, 44, 44];
+        }
+        put(himg, x0 + dx, 29 + dy, c);
+      }
+      for (let dx = 0; dx < 4; dx++) put(himg, x0 + dx, 31, [70, 28, 52], 0.15 + p * 0.65);
+    }
+    put(himg, 32, 35, shade); put(himg, 31, 36, shade); put(himg, 33, 36, shade);
+    // mouth: a line, then a grin full of teeth
+    const hw = Math.round(2 + p * 6), my = 42;
+    if (p < 0.4) {
+      for (let x = 32 - hw; x <= 32 + hw; x++) put(himg, x, my, [128, 64, 64]);
+    } else {
+      const open = 1 + Math.round((p - 0.4) * 6);
+      for (let x = 32 - hw; x <= 32 + hw; x++) {
+        const d = Math.abs(x - 32), top = d >= hw - 1 ? my - 1 : my, bottom = d === hw ? my : my + open;
+        for (let y = top; y <= bottom; y++) put(himg, x, y, [18, 4, 6]);
+        if (d < hw && x % 2 === 0) put(himg, x, top, [222, 212, 170]);
+      }
+      if (p > 0.8) {
+        const drip = Math.round((p - 0.8) * 25);
+        for (let y = my + open + 1; y <= my + open + drip; y++) put(himg, 30, y, [150, 10, 16]);
+      }
+    }
+    for (const cr of CRACKS) if (p > cr.th) for (const [x, y] of cr.pts) if (inE(x, y, 32, 32, 13, 17)) put(himg, x, y, [60, 18, 34]);
+    hctx.putImageData(himg, 0, 0);
+  }
+
+  /* ---------- film grain ---------- */
+  const grain = $('#grain'), gctx = grain.getContext('2d');
+  let gimg = null;
+  function sizeGrain() {
+    grain.width = Math.max(1, innerWidth / 3 | 0);
+    grain.height = Math.max(1, innerHeight / 3 | 0);
+    gimg = gctx.createImageData(grain.width, grain.height);
+  }
+  function drawGrain() {
+    const d = gimg.data;
+    for (let i = 0; i < d.length; i += 4) { const v = Math.random() * 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+    gctx.putImageData(gimg, 0, 0);
+  }
+  addEventListener('resize', () => { sizeGrain(); drawGrain(); });
+  sizeGrain(); drawGrain();
+
+  /* ---------- ui ---------- */
+  const ui = {
+    phase: $('#phase'), meter: $('.meter'), fill: $('#meterFill'), streak: $('#streak'), clock: $('#clock'),
+    action: $('#action'), keys: $('#keys'), pressed: $('#pressed'), timer: $('#timerFill'),
+    rite: $('#rite'), taunt: $('#taunt'), flash: $('#flash'), app: $('#app'),
+  };
+  const timers = {};
+  function say(el, text, ms) {
+    glyphs(el, text); el.classList.add('on');
+    clearTimeout(timers[el.id]); timers[el.id] = setTimeout(() => el.classList.remove('on'), ms);
+  }
+  function flash(color, peak = 0.45) {
+    ui.flash.style.background = color;
+    ui.flash.animate([{ opacity: peak }, { opacity: 0 }], { duration: RM ? 120 : 320, easing: 'ease-out' });
+  }
+  function shake(power = 1) {
+    if (RM) return;
+    const a = 10 * power;
+    ui.app.animate([
+      { transform: 'translate(0,0)' }, { transform: `translate(${-a}px,${a / 2}px)` }, { transform: `translate(${a}px,${-a / 2}px)` },
+      { transform: `translate(${-a / 2}px,0)` }, { transform: 'translate(0,0)' },
+    ], { duration: 280 });
+  }
+  function renderKeys(cls, revealAll) {
+    const item = S.cur.item;
+    ui.keys.className = cls || '';
+    ui.keys.replaceChildren();
+    item.combos.forEach((c, i) => {
+      if (i) { const t = document.createElement('span'); t.className = 'then'; t.textContent = 'THEN'; ui.keys.append(t); }
+      const s = document.createElement('span');
+      const known = revealAll || i < S.cur.step;
+      s.className = 'combo' + (known ? '' : ' ghost') + (i < S.cur.step ? ' done' : '');
+      glyphs(s, known ? show(c) : '? ? ?');
+      ui.keys.append(s);
+    });
+  }
+  function phaseName(p) {
+    return p >= 80 ? 'SHE IS SLIPPING' : p >= 55 ? 'POSSESSED' : p >= 30 ? 'IT WEAKENS' : 'ALMOST FREE';
+  }
+  function updateHud() {
+    const p = clamp(S.power, 0, 100);
+    ui.fill.style.width = p + '%';
+    ui.meter.setAttribute('aria-valuenow', Math.round(p));
+    ui.phase.textContent = phaseName(p);
+    ui.streak.textContent = 'STREAK ' + S.streak;
+    ui.clock.textContent = fmt(S.clock);
+  }
+
+  /* ---------- the rite ---------- */
+  function tierCap() { return S.hits >= 10 ? 3 : S.hits >= 4 ? 2 : 1; }
+  function draw() {
+    const cap = tierCap(), ok = i => i.tier <= cap && !S.banned.has(i) && i !== (S.cur && S.cur.item);
+    let pool = S.bag.filter(ok);
+    if (!pool.length) { S.bag = shuffle(ITEMS.slice()); pool = S.bag.filter(ok); }
+    if (!pool.length) pool = ITEMS.filter(i => !S.banned.has(i));
+    // lean toward the newest unlocked tier so the rite escalates
+    const top = pool.filter(i => i.tier === cap);
+    const item = top.length && Math.random() < 0.6 ? pick(top) : pick(pool);
+    const at = S.bag.indexOf(item); if (at >= 0) S.bag.splice(at, 1);
+    return item;
+  }
+  function nextPrompt() {
+    const item = draw();
+    const dur = Math.max(3.4, 7 - S.hits * 0.15) + (item.combos.length > 1 ? 1.6 : 0);
+    S.cur = { item, step: 0, t0: S.clock, dur, hinted: false, done: false, nextAt: 0 };
+    ui.action.textContent = item.name;
+    ui.pressed.textContent = '';
+    renderKeys('', false);
+  }
+  function resolve(pause) { S.cur.done = true; S.cur.nextAt = S.clock + pause; S.tries++; }
+  function hit() {
+    const rem = clamp(1 - (S.clock - S.cur.t0) / S.cur.dur, 0, 1);
+    const push = (3.5 + 3.5 * rem) * (S.cur.hinted ? 0.6 : 1) * (1 + Math.min(S.streak, 5) * 0.08);
+    S.power -= push; S.hits++; S.streak++; S.best = Math.max(S.best, S.streak);
+    resolve(0.45);
+    renderKeys('hit', true);
+    say(ui.rite, pick(PRIEST), 900);
+    flash('var(--holy)', 0.25); sfx.hit();
+    if (S.power <= 0) end(true);
+  }
+  function fail(text, delta, pressed) {
+    S.power += delta; S.streak = 0; S.jolt = 1;
+    S.missed.set(S.cur.item, (S.missed.get(S.cur.item) || 0) + 1);
+    resolve(1.3);
+    renderKeys('miss', true);
+    glyphs(ui.pressed, pressed ? 'YOU PRESSED ' + pressed : '');
+    say(ui.taunt, text, 1300);
+    flash('var(--blood)', 0.4); shake(delta > MISS ? 1.3 : 1); sfx.miss();
+    if (S.power >= 100) end(false);
+  }
+  function skip() {
+    S.power += SKIP; S.streak = 0;
+    S.banned.add(S.cur.item);
+    resolve(0.9);
+    renderKeys('miss', true);
+    ui.pressed.textContent = 'STRUCK FROM THE RITE FOR THIS GAME';
+    sfx.skip();
+    if (S.power >= 100) end(false);
+  }
+
+  function start(mode) {
+    audioInit();
+    Object.assign(S, {
+      state: 'playing', mode, paused: false, power: 50, clock: 0, cur: null, streak: 0, best: 0,
+      hits: 0, tries: 0, missed: new Map(), banned: new Set(), bag: shuffle(ITEMS.slice()), jolt: 0,
+    });
+    $('#title').hidden = true; $('#end').hidden = true; $('#pause').hidden = true;
+    headC.style.transform = '';
+    ui.app.classList.remove('over');
+    nextPrompt();
+    updateHud();
+  }
+
+  function bestKey(mode) { return 'sacred-shortcuts:best:' + mode; }
+  function loadBest(mode) { try { const v = parseFloat(localStorage.getItem(bestKey(mode))); return isFinite(v) ? v : null; } catch { return null; } }
+  function saveBest(mode, v) { try { localStorage.setItem(bestKey(mode), String(v)); } catch { /* storage blocked */ } }
+
+  function end(won) {
+    S.state = won ? 'won' : 'lost';
+    S.endAt = performance.now();
+    S.power = won ? 0 : 100;
+    ui.app.classList.add('over');
+    updateHud();
+    ui.timer.style.width = '0%';
+    let best = loadBest(S.mode), record = false;
+    if (won && (best == null || S.clock < best)) { best = S.clock; record = true; saveBest(S.mode, best); }
+    if (won) { sfx.win(); flash('var(--holy)', 0.8); say(ui.rite, 'IT IS FINISHED', 2400); }
+    else { sfx.lose(); flash('var(--blood)', 0.7); shake(2); say(ui.taunt, 'SHE BELONGS TO US NOW', 2600); }
+
+    $('#endTag').textContent = won ? (record ? 'NEW FASTEST EXORCISM' : 'THE GIRL IS FREE') : 'THE RITE HAS FAILED';
+    $('#endHead').textContent = won ? 'THE DEMON IS CAST OUT' : 'THE HOST IS LOST';
+    $('#endHead').style.textShadow = won ? '3px 3px 0 var(--ash)' : '';
+    $('#sTime').textContent = fmt(S.clock);
+    $('#sAcc').textContent = S.tries ? Math.round(100 * S.hits / S.tries) + '%' : '—';
+    $('#sStreak').textContent = S.best;
+    $('#sBest').textContent = best == null ? '—' : fmt(best);
+    const missed = [...S.missed.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    $('#study').hidden = !missed.length;
+    $('#studyList').replaceChildren(...missed.map(([item]) => {
+      const li = document.createElement('li');
+      const a = document.createElement('span'); a.textContent = item.name.toLowerCase();
+      const b = document.createElement('span'); glyphs(b, showAll(item));
+      li.append(a, b); return li;
+    }));
+    setTimeout(() => { if (S.state !== 'playing') { $('#end').hidden = false; $('#again').focus({ preventScroll: true }); } }, won ? 1500 : 2300);
+  }
+
+  function pause() {
+    if (S.state !== 'playing' || S.paused) return;
+    S.paused = true; $('#pause').hidden = false;
+  }
+  function resume() {
+    if (!S.paused) return;
+    S.paused = false; $('#pause').hidden = true; audioInit();
+  }
+
+  /* ---------- input ---------- */
+  addEventListener('keydown', e => {
+    if (S.state === 'playing') {
+      const c = comboOf(e);
+      if (!c) return;
+      e.preventDefault(); e.stopPropagation();
+      if (e.repeat) return;
+      if (S.paused) { if (c.key === 'enter' || c.key === 'space') resume(); return; }
+      if (!S.cur || S.cur.done) return;
+      if (c.key === 'esc' && !c.cmd && !c.ctrl && !c.alt && !c.shift) { skip(); return; }
+      const want = S.cur.item.combos[S.cur.step];
+      if (same(c, want)) {
+        S.cur.step++;
+        if (S.cur.step >= S.cur.item.combos.length) hit();
+        else { sfx.step(); renderKeys(S.cur.hinted ? 'hint' : '', S.cur.hinted); }
+      } else {
+        fail(pick(TAUNT), MISS, show(c));
+      }
+      return;
+    }
+    if (e.repeat) return;
+    if (S.state === 'title') {
+      if (e.key === '1') { e.preventDefault(); start('altar'); }
+      else if (e.key === '2') { e.preventDefault(); start('exorcist'); }
+      else if (e.key === 'Enter' && !(document.activeElement && document.activeElement.classList.contains('mode'))) { e.preventDefault(); start(S.mode); }
+    } else if (!$('#end').hidden && e.key === 'Enter' && document.activeElement !== $('#menu')) {
+      e.preventDefault(); start(S.mode);
+    }
+  }, true);
+
+  $('#modeAltar').addEventListener('click', () => start('altar'));
+  $('#modeExorcist').addEventListener('click', () => start('exorcist'));
+  $('#again').addEventListener('click', () => start(S.mode));
+  $('#menu').addEventListener('click', () => {
+    S.state = 'title'; S.cur = null; S.power = 50; headC.style.transform = '';
+    $('#end').hidden = true; $('#title').hidden = false; ui.app.classList.remove('over'); updateHud();
+    ui.action.textContent = 'TOGGLE THE SIDEBAR'; ui.pressed.textContent = '';
+    ui.keys.className = ''; ui.keys.innerHTML = '<span class="combo ghost">? ? ?</span>';
+    ui.timer.style.width = '100%'; ui.timer.classList.remove('low');
+    $('#modeAltar').focus({ preventScroll: true });
+  });
+  $('#pause').addEventListener('click', resume);
+  $('#mute').addEventListener('click', () => {
+    A.on = !A.on;
+    $('#mute').textContent = A.on ? 'SOUND ON' : 'SOUND OFF';
+    if (A.master) A.master.gain.setTargetAtTime(A.on ? 0.7 : 0, A.ctx.currentTime, 0.05);
+  });
+  addEventListener('blur', pause);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+
+  /* ---------- loop ---------- */
+  let last = performance.now(), frameNo = 0;
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now; frameNo++;
+    const t = now / 1000;
+
+    if (S.state === 'playing' && !S.paused && S.cur) {
+      S.clock += dt;
+      S.power += CREEP * dt;
+      const cur = S.cur;
+      if (cur.done) {
+        if (S.clock >= cur.nextAt && S.state === 'playing') nextPrompt();
+      } else {
+        const f = (S.clock - cur.t0) / cur.dur;
+        ui.timer.style.width = clamp(100 * (1 - f), 0, 100) + '%';
+        ui.timer.classList.toggle('low', f > 0.7);
+        if (S.mode === 'altar' && f >= 0.5 && !cur.hinted) { cur.hinted = true; renderKeys('hint', true); }
+        if (f > 0.7 && S.clock - S.lastTick > 0.5) { S.lastTick = S.clock; sfx.tick(); }
+        if (f >= 1) fail(pick(SLOW), SLOWPOKE, '');
+      }
+      if (S.state === 'playing' && S.power >= 100) end(false);
+      if (S.state === 'playing') updateHud();
+    }
+
+    const target = S.state === 'won' ? 0 : S.state === 'lost' ? 1 : S.state === 'title' ? 0.35 : clamp(S.power / 100, 0, 1);
+    S.vis += (target - S.vis) * Math.min(1, dt * (S.state === 'won' ? 1.5 : 4));
+    S.jolt = Math.max(0, S.jolt - dt * 3);
+
+    let rot = 0, jx = 0, jy = 0;
+    if (S.state === 'lost') {
+      const k = clamp((now - S.endAt) / 1700, 0, 1);
+      rot = 180 * (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+    }
+    if (!RM) {
+      const tremble = Math.max(0, S.vis - 0.55) * 2 + S.jolt;
+      if (Math.random() < tremble * 0.5) { jx = (Math.random() * 2 - 1) * tremble * 6; jy = (Math.random() * 2 - 1) * tremble * 4; }
+    }
+    headC.style.transform = `translate(${jx}px,${jy}px) rotate(${rot}deg)`;
+
+    drawHead(S.vis, t);
+    if (frameNo % 3 === 0) drawBody(S.vis);
+    if (!RM && frameNo % 2 === 0) drawGrain();
+    if (!RM) ui.app.style.opacity = String(0.94 + Math.random() * 0.06 - (Math.random() < 0.01 ? 0.25 : 0));
+
+    if (A.ctx && now - A.lastDrone > 150) { A.lastDrone = now; droneTo(S.vis, S.state === 'playing' && !S.paused); }
+    requestAnimationFrame(frame);
+  }
+  drawBody(0.35);
+  requestAnimationFrame(frame);
+
+  window.SacredShortcuts = { S, ITEMS };
+})();
+</script>
+</body>
+</html>
