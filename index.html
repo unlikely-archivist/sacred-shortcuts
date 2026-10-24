@@ -97,6 +97,33 @@ button { font: inherit; color: inherit; }
 #timerFill.low { background: var(--blood); }
 .foot { font-size: 18px; color: var(--ash); }
 
+/* Tap controls */
+#choices { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: min(600px, 100%); }
+.tap #choices { display: grid; }
+.tap #keys, .tap #pressed, .tap .foot { display: none; }
+.choice {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 58px; padding: 12px 10px; background: none; border: 2px solid var(--ash); cursor: pointer;
+  font-family: var(--display); font-size: clamp(15px, 4.2vw, 20px); letter-spacing: .1em; color: var(--bone);
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: opacity .2s;
+}
+.choice kbd { position: absolute; top: 5px; left: 7px; font-family: var(--display); font-size: 7px; color: var(--ash); }
+.choice:hover:not(:disabled) { border-color: var(--bone); }
+.choice:disabled { cursor: default; }
+.choice.struck { opacity: .2; }
+.choice.right { border-color: var(--holy); color: var(--holy); box-shadow: 0 0 18px rgba(255, 243, 207, .35); }
+.choice.wrong { border-color: var(--blood); color: var(--blood); box-shadow: 0 0 18px rgba(211, 20, 31, .4); }
+@media (max-width: 520px) {
+  #choices { grid-template-columns: 1fr; gap: 8px; }
+  .choice { min-height: 52px; }
+  .invoke { gap: 8px; min-height: 0; }
+}
+@media (hover: none) { .choice kbd, .mode kbd { display: none; } }
+
+.inputs { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; font-family: var(--display); font-size: 9px; letter-spacing: .15em; color: var(--ash); }
+.pill { background: none; border: 2px solid var(--ash); padding: 8px 12px; cursor: pointer; font-family: var(--display); font-size: 9px; letter-spacing: .15em; color: var(--ash); touch-action: manipulation; }
+.pill[aria-pressed="true"] { border-color: var(--bone); color: var(--holy); }
+
 /* Screens */
 .screen {
   position: absolute; inset: 0; z-index: 5;
@@ -122,8 +149,6 @@ button { font: inherit; color: inherit; }
 .mode:hover b, .mode:focus-visible b { color: var(--holy); }
 .mode kbd { font-family: var(--display); font-size: 8px; color: var(--ash); }
 .small { font-size: 18px; color: var(--ash); margin: 0; max-width: 36em; }
-.touch-note { display: none; color: var(--blood); }
-@media (hover: none) and (pointer: coarse) { .touch-note { display: block; } }
 
 .statgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; width: min(560px, 100%); }
 .statgrid div { display: grid; gap: 6px; }
@@ -174,6 +199,7 @@ button { font: inherit; color: inherit; }
     <div id="action">TOGGLE THE SIDEBAR</div>
     <div id="keys"><span class="combo ghost">? ? ?</span></div>
     <div id="pressed"></div>
+    <div id="choices"></div>
     <div class="timer"><div id="timerFill"></div></div>
     <div class="foot">Esc skips a shortcut your browser won't let through</div>
   </footer>
@@ -181,18 +207,22 @@ button { font: inherit; color: inherit; }
   <section id="title" class="screen">
     <div class="tag">THE POWER OF <span class="mod">⌘</span> COMPELS YOU</div>
     <h1>SACRED<br>SHORTCUTS</h1>
-    <p class="howto">Something has taken the girl. Each prompt names a VS Code command. Press its Mac shortcut before the candle burns down. Every right answer drives the demon back. Every mistake, every hesitation, feeds it.</p>
+    <p class="howto">Something has taken the girl. Each prompt names a VS Code command. <span id="howVerb">Press its Mac shortcut</span> before the candle burns down. Every right answer drives the demon back. Every mistake, every hesitation, feeds it.</p>
+    <div class="inputs" role="group" aria-label="Controls">
+      <span>CONTROLS</span>
+      <button class="pill" id="inKeys" type="button" aria-pressed="true">KEYBOARD</button>
+      <button class="pill" id="inTap" type="button" aria-pressed="false">TAP</button>
+    </div>
     <div class="modes">
-      <button class="mode" id="modeAltar" type="button"><kbd>PRESS 1</kbd><b>ALTAR BOY</b><span>The keys appear when your time runs low.</span></button>
+      <button class="mode" id="modeAltar" type="button"><kbd>PRESS 1</kbd><b>ALTAR BOY</b><span id="altarHelp">The keys appear when your time runs low.</span></button>
       <button class="mode" id="modeExorcist" type="button"><kbd>PRESS 2</kbd><b>EXORCIST</b><span>No help from above.</span></button>
     </div>
     <p class="small">VS Code default keybindings, Mac layout. Works best in Chrome.</p>
-    <p class="small touch-note">This rite needs a physical keyboard.</p>
   </section>
 
   <section id="pause" class="screen" hidden>
     <h2>THE RITE IS PAUSED</h2>
-    <p class="small">The page lost focus. Click here or press Enter to continue.</p>
+    <p class="small">The page lost focus. Tap or click here, or press Enter, to continue.</p>
   </section>
 
   <section id="end" class="screen" hidden>
@@ -336,7 +366,8 @@ button { font: inherit; color: inherit; }
   }
   const same = (a, b) => a.cmd === b.cmd && a.ctrl === b.ctrl && a.alt === b.alt && a.shift === b.shift && a.key === b.key;
   const show = c => (c.ctrl ? '⌃' : '') + (c.alt ? '⌥' : '') + (c.shift ? '⇧' : '') + (c.cmd ? '⌘' : '') + (GLYPH[c.key] || c.key.toUpperCase());
-  const showAll = item => item.combos.map(show).join(' ');
+  const showCombos = combos => combos.map(show).join(' ');
+  const showAll = item => showCombos(item.combos);
   // The arcade face has no ⌘⇧⌥⌃, so those get a system symbol font.
   function glyphs(el, text) {
     el.replaceChildren(...text.split(/([⌘⇧⌥⌃])/).filter(Boolean).map(part => {
@@ -354,7 +385,7 @@ button { font: inherit; color: inherit; }
   const MISS = 9, SLOWPOKE = 11, SKIP = 5;
 
   const S = {
-    state: 'title', mode: 'altar', paused: false, power: 50, vis: 0.5, clock: 0,
+    state: 'title', mode: 'altar', input: 'keys', paused: false, power: 50, vis: 0.5, clock: 0,
     cur: null, streak: 0, best: 0, hits: 0, tries: 0, missed: new Map(), banned: new Set(), bag: [],
     endAt: 0, jolt: 0, lastTick: 0,
   };
@@ -594,13 +625,18 @@ button { font: inherit; color: inherit; }
   }
   function nextPrompt() {
     const item = draw();
-    const dur = Math.max(3.4, 7 - S.hits * 0.15) + (item.combos.length > 1 ? 1.6 : 0);
-    S.cur = { item, step: 0, t0: S.clock, dur, hinted: false, done: false, nextAt: 0 };
+    const chord = item.combos.length > 1;
+    // picking from three is easier than recalling, so taps get less time
+    const dur = S.input === 'tap'
+      ? Math.max(2.6, 5 - S.hits * 0.12) + (chord ? 0.6 : 0)
+      : Math.max(3.4, 7 - S.hits * 0.15) + (chord ? 1.6 : 0);
+    S.cur = { item, step: 0, t0: S.clock, dur, hinted: false, done: false, nextAt: 0, options: null, chosen: -1 };
     ui.action.textContent = item.name;
     ui.pressed.textContent = '';
     renderKeys('', false);
+    if (S.input === 'tap') renderChoices();
   }
-  function resolve(pause) { S.cur.done = true; S.cur.nextAt = S.clock + pause; S.tries++; }
+  function resolve(pause) { S.cur.done = true; S.cur.nextAt = S.clock + pause; S.tries++; settleChoices(); }
   function hit() {
     const rem = clamp(1 - (S.clock - S.cur.t0) / S.cur.dur, 0, 1);
     const push = (3.5 + 3.5 * rem) * (S.cur.hinted ? 0.6 : 1) * (1 + Math.min(S.streak, 5) * 0.08);
@@ -629,6 +665,95 @@ button { font: inherit; color: inherit; }
     ui.pressed.textContent = 'STRUCK FROM THE RITE FOR THIS GAME';
     sfx.skip();
     if (S.power >= 100) end(false);
+  }
+
+  /* ---------- tap controls ---------- */
+  const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
+  const MODS = ['cmd', 'ctrl', 'alt', 'shift'];
+  const modsOf = c => MODS.filter(m => c[m]).join('+');
+
+  // Near misses of the real shortcut: flip a modifier, mix up ⌘ and ⌃, or garble a chord.
+  function mutations(combos) {
+    const out = [], last = combos.length - 1, c = combos[last];
+    const swap = fn => { const v = combos.map(x => ({ ...x })); fn(v[last]); return v; };
+    out.push(swap(x => { x.shift = !x.shift; }));
+    out.push(swap(x => { x.alt = !x.alt; }));
+    if (c.cmd) out.push(swap(x => { x.cmd = false; x.ctrl = true; }));
+    if (c.ctrl) out.push(swap(x => { x.ctrl = false; x.cmd = true; }));
+    if (combos.length > 1) {
+      out.push(swap(x => { x.cmd = !x.cmd; }));
+      out.push([{ cmd: true, ctrl: false, alt: false, shift: false, key: 'j' }, { ...c }]);
+      out.push([{ ...c, cmd: true }]);
+    } else if (c.cmd && !c.shift && !c.alt) {
+      out.push([{ cmd: true, ctrl: false, alt: false, shift: false, key: 'k' }, { ...c }]);
+    }
+    // a lone letter with no modifier is an obvious fake
+    return out.filter(v => v.every(x => MODS.some(m => x[m]) || /^(f\d+|up|down|left|right|enter)$/.test(x.key)));
+  }
+  function decoys(item) {
+    const seen = new Set([showAll(item)]), picks = [];
+    const add = combos => { const k = showCombos(combos); if (seen.has(k)) return false; seen.add(k); picks.push(combos); return true; };
+    // real shortcuts for other commands, preferring ones that look alike
+    const target = item.combos[item.combos.length - 1];
+    const score = o => {
+      const t = o.combos[o.combos.length - 1];
+      return (modsOf(t) === modsOf(target) ? 2 : 0) + (t.key === target.key ? 2 : 0) + (o.combos.length === item.combos.length ? 1 : 0) + Math.random() * 2;
+    };
+    const others = ITEMS.filter(o => o !== item).sort((a, b) => score(b) - score(a));
+    const muts = shuffle(mutations(item.combos));
+    const order = Math.random() < 0.5 ? ['real', 'mut'] : ['mut', 'mut'];
+    for (const kind of order) {
+      if (kind === 'real') { for (const o of others) if (add(o.combos)) break; }
+      else { while (muts.length && !add(muts.shift())); }
+    }
+    for (const o of others) { if (picks.length >= 2) break; add(o.combos); }
+    return picks.slice(0, 2);
+  }
+  function renderChoices() {
+    const box = $('#choices'), cur = S.cur;
+    const opts = shuffle([{ combos: cur.item.combos, right: true }, ...decoys(cur.item).map(combos => ({ combos, right: false }))]);
+    cur.options = opts;
+    box.replaceChildren(...opts.map((o, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'choice';
+      const k = document.createElement('kbd'); k.textContent = i + 1;
+      const t = document.createElement('span'); glyphs(t, showCombos(o.combos));
+      b.append(k, t);
+      b.addEventListener('click', () => choose(i));
+      o.el = b; return b;
+    }));
+  }
+  function choose(i) {
+    const cur = S.cur;
+    if (S.state !== 'playing' || S.paused || !cur || cur.done || !cur.options) return;
+    const o = cur.options[i];
+    if (!o || o.el.disabled) return;
+    cur.chosen = i;
+    if (o.right) hit(); else fail(pick(TAUNT), MISS, showCombos(o.combos));
+  }
+  function settleChoices() {
+    const cur = S.cur;
+    if (!cur.options) return;
+    cur.options.forEach((o, i) => {
+      o.el.disabled = true;
+      if (o.right) o.el.classList.add('right');
+      else if (i === cur.chosen) o.el.classList.add('wrong');
+      else o.el.classList.add('struck');
+    });
+  }
+  function strikeOne() {
+    const wrong = S.cur.options.filter(o => !o.right && !o.el.disabled);
+    if (!wrong.length) return;
+    const o = pick(wrong); o.el.disabled = true; o.el.classList.add('struck');
+  }
+  function setInput(v) {
+    S.input = v;
+    ui.app.classList.toggle('tap', v === 'tap');
+    $('#inKeys').setAttribute('aria-pressed', String(v === 'keys'));
+    $('#inTap').setAttribute('aria-pressed', String(v === 'tap'));
+    $('#howVerb').textContent = v === 'tap' ? 'Pick its Mac shortcut out of three' : 'Press its Mac shortcut';
+    $('#altarHelp').textContent = v === 'tap' ? 'A wrong answer burns away when your time runs low.' : 'The keys appear when your time runs low.';
+    try { localStorage.setItem('sacred-shortcuts:input', v); } catch { /* storage blocked */ }
   }
 
   function start(mode) {
@@ -696,6 +821,10 @@ button { font: inherit; color: inherit; }
       if (e.repeat) return;
       if (S.paused) { if (c.key === 'enter' || c.key === 'space') resume(); return; }
       if (!S.cur || S.cur.done) return;
+      if (S.input === 'tap') {
+        if (/^[1-3]$/.test(c.key) && !c.cmd && !c.ctrl && !c.alt && !c.shift) choose(+c.key - 1);
+        return;
+      }
       if (c.key === 'esc' && !c.cmd && !c.ctrl && !c.alt && !c.shift) { skip(); return; }
       const want = S.cur.item.combos[S.cur.step];
       if (same(c, want)) {
@@ -717,6 +846,11 @@ button { font: inherit; color: inherit; }
     }
   }, true);
 
+  $('#inKeys').addEventListener('click', () => setInput('keys'));
+  $('#inTap').addEventListener('click', () => setInput('tap'));
+  let savedInput = null;
+  try { savedInput = localStorage.getItem('sacred-shortcuts:input'); } catch { /* storage blocked */ }
+  setInput(savedInput === 'keys' || savedInput === 'tap' ? savedInput : TOUCH ? 'tap' : 'keys');
   $('#modeAltar').addEventListener('click', () => start('altar'));
   $('#modeExorcist').addEventListener('click', () => start('exorcist'));
   $('#again').addEventListener('click', () => start(S.mode));
@@ -753,7 +887,10 @@ button { font: inherit; color: inherit; }
         const f = (S.clock - cur.t0) / cur.dur;
         ui.timer.style.width = clamp(100 * (1 - f), 0, 100) + '%';
         ui.timer.classList.toggle('low', f > 0.7);
-        if (S.mode === 'altar' && f >= 0.5 && !cur.hinted) { cur.hinted = true; renderKeys('hint', true); }
+        if (S.mode === 'altar' && f >= 0.5 && !cur.hinted) {
+          cur.hinted = true;
+          if (S.input === 'tap') strikeOne(); else renderKeys('hint', true);
+        }
         if (f > 0.7 && S.clock - S.lastTick > 0.5) { S.lastTick = S.clock; sfx.tick(); }
         if (f >= 1) fail(pick(SLOW), SLOWPOKE, '');
       }
@@ -787,7 +924,7 @@ button { font: inherit; color: inherit; }
   drawBody(0.35);
   requestAnimationFrame(frame);
 
-  window.SacredShortcuts = { S, ITEMS };
+  window.SacredShortcuts = { S, ITEMS, renderChoices };
 })();
 </script>
 </body>
